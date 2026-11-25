@@ -1,0 +1,18 @@
+node_modules/
+dist/
+backend/dist/
+admin/dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+backend/.env
+admin/.env
+backend/.local-data/
+*.local
+
+# AI agent / tooling folders (not part of the project)
+.agent/
+.agents/
+.impeccable/
+ponytail-5.3.3/

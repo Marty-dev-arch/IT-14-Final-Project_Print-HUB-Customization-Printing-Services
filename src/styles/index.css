@@ -1,0 +1,962 @@
+@import "tailwindcss";
+
+:root {
+  --neutral-white: #fefefe;
+  --neutral-white-200: #fafafa;
+  --neutral-white-300: #eaeaea;
+  --neutral-black-900: #000000;
+  --neutral-black-800: #151515;
+  --neutral-black-700: #676767;
+  --neutral-gray-600: #858585;
+  --brand-light-green: #38bdf8;
+  --brand-light-green-hover: #0ea5e9;
+  --pastel-blue: #8bf2ff;
+  --pastel-purple: #cba3ff;
+  --pastel-gold: #ffe73d;
+  --pastel-sky: #94bdff;
+  --pastel-amber: #ffb731;
+  --pastel-canary: #bae6fd;
+  --pastel-celery: #e0f2fe;
+
+  /* Semantic aliases */
+  --paper: var(--neutral-white);
+  --sheet: var(--neutral-white);
+  --surface-soft: var(--neutral-white-200);
+  --rail: var(--neutral-white-200);
+  --ink: var(--neutral-black-900);
+  --ink-strong: var(--neutral-black-800);
+  --ink-muted: var(--neutral-black-700);
+  --ink-subtle: var(--neutral-gray-600);
+  --line: var(--neutral-white-300);
+  --line-strong: #d4d4d4;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Inter', system-ui, -apple-system, sans-serif;
+  --ease-printula: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-webflow: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@layer base {
+  html {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--paper);
+    color: var(--ink);
+    caret-color: var(--neutral-black-900);
+  }
+
+  ::selection {
+    background-color: #38bdf866;
+    color: var(--neutral-black-900);
+  }
+
+  a {
+    text-underline-offset: 0.2em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--neutral-black-900);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px #38bdf880;
+  }
+
+  /* Pure thin non-bold Webflow blue highlight matching Contact & Form reference */
+  input,
+  textarea,
+  select,
+  .ph-phone-field {
+    transition: border-color 180ms ease;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: #3898ec;
+    box-shadow: none;
+  }
+
+  input[aria-invalid='true']:focus,
+  textarea[aria-invalid='true']:focus,
+  select[aria-invalid='true']:focus {
+    border-color: #c8004b;
+    box-shadow: none;
+  }
+
+  .ph-phone-field:focus-within {
+    border-color: #3898ec;
+    box-shadow: none;
+  }
+
+  .ph-phone-field[data-invalid='true']:focus-within {
+    border-color: #c8004b;
+    box-shadow: none;
+  }
+
+  .ph-phone-field input:focus,
+  .ph-phone-field input:focus-visible {
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+
+  button,
+  [role='button'],
+  select,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--neutral-white);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #d4d4d4;
+    border-radius: 9999px;
+    border: 2px solid var(--neutral-white);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--neutral-gray-600);
+  }
+}
+
+.font-mono-code {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "zero" 0;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Printula /style-guide exact typography scale & responsive steps */
+.heading-style-h1,
+.heading-style-h2,
+.heading-style-h3,
+.heading-style-h4,
+.heading-style-h5,
+.heading-style-h6 {
+  font-family: var(--font-sans);
+  color: var(--neutral-black-900);
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.heading-style-h1 {
+  font-size: 3.5rem;
+  font-weight: 600;
+  line-height: 4rem;
+  letter-spacing: -0.025em;
+}
+
+.heading-style-h2 {
+  font-size: 2.625rem;
+  font-weight: 600;
+  line-height: 3.125rem;
+  letter-spacing: -0.02em;
+}
+
+.heading-style-h3 {
+  font-size: 2.125rem;
+  font-weight: 600;
+  line-height: 2.625rem;
+  letter-spacing: -0.015em;
+}
+
+.heading-style-h4 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  line-height: 2.375rem;
+  letter-spacing: -0.015em;
+}
+
+.heading-style-h5 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 2rem;
+}
+
+.heading-style-h6 {
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.625rem;
+}
+
+.text-size-regular {
+  font-family: var(--font-sans);
+  color: var(--neutral-black-700);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5rem;
+}
+
+.text-size-regular.is-black-900 {
+  color: var(--neutral-black-900);
+}
+
+.text-size-regular.is-black-800 {
+  color: var(--neutral-black-800);
+  font-weight: 500;
+  line-height: 1rem;
+}
+
+.text-size-small {
+  font-family: var(--font-sans);
+  color: var(--neutral-black-700);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.375rem;
+}
+
+.text-size-small.is-black-900 {
+  color: var(--neutral-black-900);
+}
+
+.text-size-caption {
+  font-family: var(--font-sans);
+  color: var(--neutral-black-900);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.25rem;
+}
+
+@media screen and (max-width: 991px) {
+  .heading-style-h1 {
+    font-size: 3rem;
+    line-height: 3.5rem;
+  }
+  .heading-style-h2 {
+    font-size: 2.4rem;
+    line-height: 2.9rem;
+  }
+  .heading-style-h3 {
+    font-size: 1.9rem;
+    line-height: 2.4rem;
+  }
+  .heading-style-h4 {
+    font-size: 1.7rem;
+    line-height: 2.2rem;
+  }
+  .heading-style-h5 {
+    font-size: 1.4rem;
+    line-height: 1.9rem;
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .heading-style-h1 {
+    font-size: 2.5rem;
+    line-height: 3rem;
+  }
+  .heading-style-h2 {
+    font-size: 2.2rem;
+    line-height: 2.7rem;
+  }
+  .heading-style-h3 {
+    font-size: 1.8rem;
+    line-height: 2.3rem;
+  }
+  .heading-style-h4 {
+    font-size: 1.6rem;
+    line-height: 2.1rem;
+  }
+  .heading-style-h5 {
+    font-size: 1.3rem;
+    line-height: 1.8rem;
+  }
+}
+
+@media screen and (max-width: 479px) {
+  .heading-style-h1 {
+    font-size: 2rem;
+    line-height: 2.5rem;
+  }
+  .heading-style-h2 {
+    font-size: 1.8rem;
+    line-height: 2.3rem;
+  }
+  .heading-style-h3 {
+    font-size: 1.6rem;
+    line-height: 2.1rem;
+  }
+  .heading-style-h4 {
+    font-size: 1.4rem;
+    line-height: 1.9rem;
+  }
+  .heading-style-h5 {
+    font-size: 1.2rem;
+    line-height: 1.7rem;
+  }
+  .heading-style-h6 {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
+
+/* Printula /style-guide Button 2 & Unified Header Inquiry CTA (.button-strok-wapper + .button.is-secondary + .button-line) */
+/* Exact Webflow IX2 a-27 / a-28 keyframes: -57deg -> 230deg outQuart over 1500ms on hover in, 1000ms outQuart on hover out */
+.btn-printula,
+.btn-printula-lime {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.625rem;
+  background-color: var(--neutral-black-900);
+  color: var(--neutral-black-900);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1rem;
+  padding: calc(0.875rem + 2px) calc(2.5625rem + 2px);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-printula::before,
+.btn-printula-lime::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -2;
+  width: 7px;
+  height: 250px;
+  background-color: #d9d9d9;
+  transform: translate3d(-50%, -50%, 0) rotateZ(-57deg);
+  transition: transform 1000ms var(--ease-out-quart);
+  pointer-events: none;
+}
+
+.btn-printula::after,
+.btn-printula-lime::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  border-radius: calc(0.625rem - 2px);
+  background-color: var(--neutral-white-200);
+  transition: background-color 1000ms var(--ease-out-quart);
+  pointer-events: none;
+}
+
+.btn-printula:hover::before,
+.btn-printula-lime:hover::before {
+  transform: translate3d(-50%, -50%, 0) rotateZ(230deg);
+  transition-duration: 1500ms;
+}
+
+.btn-printula:hover::after,
+.btn-printula-lime:hover::after {
+  background-color: var(--brand-light-green);
+  transition-duration: 1500ms;
+}
+
+.btn-printula svg,
+.btn-printula-lime svg {
+  transition: transform 240ms var(--ease-out-quart);
+}
+
+.btn-printula:hover svg,
+.btn-printula-lime:hover svg {
+  transform: translate3d(3px, 0, 0);
+}
+
+/* Printula /style-guide Button 3: Third button (.button.is-third) */
+.btn-printula-soft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--neutral-white-300);
+  background-color: var(--neutral-white-200);
+  color: var(--neutral-black-900);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1rem;
+  padding: 0.875rem 1.375rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 500ms ease, background-color 600ms ease, border-color 500ms ease;
+}
+
+.btn-printula-soft:hover {
+  border-color: var(--neutral-black-900);
+  background-color: var(--neutral-black-900);
+  color: var(--neutral-white-200);
+}
+
+/* Clean Printula Lime Submit Button (matching Contact Form & Chat Inquiry submit CTA) */
+.btn-lime-clean {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3rem;
+  border: none;
+  border-radius: 0.625rem;
+  background-color: var(--brand-light-green);
+  color: var(--neutral-black-900);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1rem;
+  padding: 0 1.5rem;
+  cursor: pointer;
+  transition: background-color 180ms ease, transform 180ms var(--ease-printula);
+}
+
+.btn-lime-clean:hover {
+  background-color: var(--brand-light-green-hover);
+}
+
+.btn-lime-clean:active {
+  transform: scale(0.99);
+}
+
+.btn-lime-clean:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(56, 152, 236, 0.35);
+}
+
+@media screen and (max-width: 479px) {
+  .btn-printula,
+  .btn-printula-lime {
+    padding: calc(0.75rem + 2px) calc(1.5rem + 2px);
+    font-size: 0.875rem;
+  }
+  .btn-printula-soft {
+    padding: 0.75rem 1.375rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* Header navigation animated underline */
+.nav-link-printula {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+.nav-link-printula::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  background-color: var(--brand-light-green);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 220ms var(--ease-printula);
+}
+
+.nav-link-printula:hover::after,
+.nav-link-printula[aria-current='page']::after {
+  transform: scaleX(1);
+}
+
+/* Header initial refresh glide & route page transition */
+@keyframes headerEnter {
+  from {
+    opacity: 0.01;
+    transform: translate3d(0, -8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.printula-header-enter {
+  animation: headerEnter 520ms var(--ease-webflow) both;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0.01;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-enter {
+  animation: pageEnter 280ms var(--ease-webflow) both;
+}
+
+/* Smooth scroll reveal + dropdown glide */
+.printula-scroll-reveal[data-reveal='pending'] {
+  opacity: 0;
+  transform: translate3d(0, 32px, 0) scale(0.98);
+}
+
+.printula-scroll-reveal[data-reveal='visible'] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition: opacity 780ms var(--ease-webflow), transform 780ms var(--ease-webflow);
+}
+
+.printula-scroll-reveal[data-reveal='enter'] {
+  animation: printulaScrollDrop 780ms var(--ease-webflow) both;
+}
+
+@keyframes printulaScrollDrop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 32px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes dropdownGlide {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.dropdown-glide-enter {
+  transform-origin: top right;
+  animation: dropdownGlide 260ms var(--ease-webflow) both;
+}
+
+/* Webflow-style Studio Modal / Cart Drawer transitions */
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalDrawerIn {
+  from {
+    opacity: 0.92;
+    transform: translate3d(0, 14px, 0) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.modal-backdrop-enter {
+  animation: modalBackdropIn 200ms ease both;
+}
+
+.modal-drawer-enter {
+  transform-origin: bottom right;
+  animation: modalDrawerIn 240ms var(--ease-webflow) both;
+}
+
+.press-shadow {
+  box-shadow: 0 12px 32px -18px rgba(0, 0, 0, 0.14), 0 2px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+/* Printula Webflow staggered upward hero entrance & spotlight scale */
+@keyframes printulaRise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes printulaScaleIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.printula-rise {
+  animation: printulaRise 760ms var(--ease-webflow) both;
+}
+
+.printula-scale-in {
+  animation: printulaScaleIn 820ms var(--ease-webflow) both;
+}
+
+.printula-delay-1 {
+  animation-delay: 140ms;
+}
+
+.printula-delay-2 {
+  animation-delay: 280ms;
+}
+
+.printula-delay-3 {
+  animation-delay: 420ms;
+}
+
+.printula-delay-4 {
+  animation-delay: 540ms;
+}
+
+@keyframes plateSettle {
+  from {
+    opacity: 0.45;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.plate-settle {
+  animation: plateSettle 240ms var(--ease-printula) both;
+}
+
+/* Printula horizontal service ticker (opposing 2-row marquee) */
+@keyframes printulaMarquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes printulaMarqueeReverse {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.printula-marquee {
+  overflow: hidden;
+  width: 100%;
+}
+
+.printula-marquee-mask {
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+.printula-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: printulaMarquee 30s linear infinite;
+}
+
+.printula-marquee-track-reverse {
+  display: flex;
+  width: max-content;
+  animation: printulaMarqueeReverse 32s linear infinite;
+}
+
+.printula-marquee:hover .printula-marquee-track,
+.printula-marquee:hover .printula-marquee-track-reverse {
+  animation-play-state: paused;
+}
+
+/* About hero photo crossfade & circular lime spotlight float */
+.crossfade-slide {
+  transition: opacity 700ms var(--ease-printula), transform 900ms var(--ease-printula);
+}
+
+@keyframes spotlightFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+.printula-spotlight-float {
+  animation: spotlightFloat 4s ease-in-out infinite;
+}
+
+/* Card child hover motion (keeps outer pointer target stationary) */
+.printula-card-media {
+  transition: transform 380ms var(--ease-printula);
+}
+
+.group:hover .printula-card-media,
+.group:focus-visible .printula-card-media {
+  transform: scale(1.04);
+}
+
+/* Printula service card with bottom-right inverted corner notch & pop-in lime arrow */
+.printula-service-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 25rem;
+  border: 1px solid var(--neutral-white-300);
+  background-color: var(--neutral-white-200);
+  border-radius: 0.625rem;
+  padding: 1.875rem;
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color 220ms var(--ease-printula);
+}
+
+.printula-service-notch {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  z-index: 4;
+  width: 5.0625rem;
+  height: 5.0625rem;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.75);
+  transform-origin: bottom right;
+  transition: opacity 220ms var(--ease-printula), transform 260ms var(--ease-printula);
+}
+
+.printula-service-arrow {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 3.75rem;
+  height: 3.75rem;
+  border-radius: 0.9375rem;
+  background-color: var(--brand-light-green);
+  color: var(--neutral-black-900);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(0);
+  transform-origin: bottom right;
+  transition: transform 280ms var(--ease-printula), background-color 200ms var(--ease-printula);
+}
+
+.printula-service-card:hover .printula-service-notch,
+.printula-service-card:focus-visible .printula-service-notch {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.printula-service-card:hover .printula-service-arrow,
+.printula-service-card:focus-visible .printula-service-arrow {
+  transform: scale(1);
+}
+
+.printula-service-arrow svg {
+  transition: transform 240ms var(--ease-printula);
+}
+
+.printula-service-card:hover .printula-service-arrow svg {
+  transform: translate3d(2px, -2px, 0);
+}
+
+@media (hover: none) {
+  .printula-service-notch {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .printula-service-arrow {
+    transform: scale(1);
+  }
+}
+
+/* Printula interactive review cards (star illumination & border highlight) */
+.printula-review-card {
+  border-radius: 0.625rem;
+  border: 1px solid var(--neutral-white-300);
+  background-color: var(--neutral-white);
+  transition: border-color 220ms var(--ease-printula), background-color 220ms var(--ease-printula);
+}
+
+.printula-review-card[data-active='true'],
+.printula-review-card:hover {
+  border-color: #c8c8c8;
+  background-color: var(--neutral-white);
+}
+
+.printula-review-star {
+  color: #e2e2e2;
+  fill: #e2e2e2;
+  transition: color 220ms var(--ease-printula), fill 220ms var(--ease-printula),
+    transform 220ms var(--ease-printula);
+}
+
+.printula-review-card[data-active='true'] .printula-review-star,
+.printula-review-card:hover .printula-review-star {
+  color: #ffb731;
+  fill: #ffb731;
+}
+
+.printula-review-quote {
+  color: #151515;
+  fill: #151515;
+  transition: color 220ms var(--ease-printula), fill 220ms var(--ease-printula),
+    transform 220ms var(--ease-printula);
+}
+
+.printula-review-card:hover .printula-review-quote {
+  transform: scale(1.06);
+}
+
+.printula-arrow-tile {
+  background-color: var(--brand-light-green);
+  color: var(--neutral-black-900);
+  transition: background-color 220ms var(--ease-printula), color 220ms var(--ease-printula);
+}
+
+.group:hover .printula-arrow-tile {
+  background-color: var(--neutral-black-900);
+  color: var(--brand-light-green);
+}
+
+.printula-arrow-tile svg {
+  transition: transform 240ms var(--ease-printula);
+}
+
+.group:hover .printula-arrow-tile svg {
+  transform: translate3d(3px, -3px, 0);
+}
+
+/* Contact info tile hover */
+.printula-contact-tile {
+  transition: border-color 220ms var(--ease-printula), background-color 220ms var(--ease-printula);
+}
+
+.printula-contact-tile:hover {
+  border-color: var(--neutral-black-900);
+}
+
+.printula-contact-arrow {
+  transition: background-color 220ms var(--ease-printula), color 220ms var(--ease-printula),
+    transform 220ms var(--ease-printula);
+}
+
+.printula-contact-tile:hover .printula-contact-arrow {
+  background-color: var(--brand-light-green);
+  color: var(--neutral-black-900);
+  transform: translate3d(2px, -2px, 0);
+}
+
+/* Footer contact strip hover */
+.printula-footer-item {
+  transition: gap 240ms var(--ease-printula);
+}
+
+.printula-footer-item:hover {
+  gap: 0.625rem;
+}
+
+/* CTA banner bag mockup hover tilt */
+.cta-mockup-tilt {
+  transition: transform 420ms var(--ease-printula);
+}
+
+.group:hover .cta-mockup-tilt {
+  transform: rotate(-2deg) scale(1.03);
+}
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .printula-header-enter,
+  .printula-rise,
+  .printula-scale-in,
+  .plate-settle,
+  .page-enter,
+  .modal-backdrop-enter,
+  .modal-drawer-enter,
+  .printula-marquee-track,
+  .printula-marquee-track-reverse,
+  .printula-spotlight-float,
+  .printula-scroll-reveal[data-reveal='enter'],
+  .dropdown-glide-enter {
+    animation: none;
+  }
+  .printula-scroll-reveal[data-reveal='pending'] {
+    opacity: 1;
+    transform: none;
+  }
+  .printula-scroll-reveal[data-reveal='visible'] {
+    transition: none;
+  }
+  .btn-printula::before,
+  .btn-printula-lime::before,
+  .btn-printula::after,
+  .btn-printula-lime::after,
+  .btn-printula-soft,
+  .btn-printula svg,
+  .btn-printula-lime svg,
+  .nav-link-printula::after,
+  .crossfade-slide,
+  .printula-card-media,
+  .printula-service-notch,
+  .printula-service-arrow,
+  .printula-service-arrow svg,
+  .printula-review-card,
+  .printula-review-star,
+  .printula-review-quote,
+  .printula-arrow-tile,
+  .printula-arrow-tile svg,
+  .printula-contact-tile,
+  .printula-contact-arrow,
+  .printula-footer-item,
+  .cta-mockup-tilt {
+    transition: none;
+  }
+  .btn-printula:hover::before,
+  .btn-printula-lime:hover::before {
+    transform: translate3d(-50%, -50%, 0) rotateZ(-57deg);
+  }
+  .printula-card-media,
+  .printula-service-arrow svg,
+  .printula-review-quote,
+  .printula-arrow-tile svg,
+  .cta-mockup-tilt {
+    transform: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
