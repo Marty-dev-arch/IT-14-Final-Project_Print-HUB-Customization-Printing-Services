@@ -1,4 +1,5 @@
-import { ArrowUpRight, Heart } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
+import { DuotoneHeartIcon } from './DuotoneIcons';
 import { useAppStore } from '../context/AppStoreContext';
 import type { ServiceAccent, ServiceItem } from '../types/domain';
 
@@ -402,8 +403,9 @@ export function PrintulaServiceCard({
               : 'border-[var(--line)] bg-[var(--paper)] text-[var(--ink-muted)] hover:border-[#BAE6FD] hover:text-black'
           }`}
         >
-          <Heart
-            className={`h-4 w-4 ${isFavorite ? 'fill-black text-black' : ''}`}
+          <DuotoneHeartIcon
+            filled={isFavorite}
+            className={`h-4 w-4 ${isFavorite ? 'text-black' : ''}`}
             aria-hidden="true"
           />
         </button>

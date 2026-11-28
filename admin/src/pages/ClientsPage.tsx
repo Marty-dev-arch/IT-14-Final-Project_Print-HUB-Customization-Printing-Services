@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { TablePaginationFooter } from '../components/TableChrome';
 import { ApiError, apiRequest, SERVICE_NAMES } from '../lib/api';
 import type { ClientItem, ClientOrderStatus, InquiryItem } from '../types';
 
+const isBlankOrNA = (val: string) => {
+  const upper = val.trim().toUpperCase();
+  return upper === '' || upper === 'N/A';
+};
+
 const ORDER_STATUS_STYLE: Record<ClientOrderStatus, string> = {
-  Pending: 'bg-[#FFF7ED] text-[#C2410C] border-transparent focus:border-[#FDBA74]',
-  Done: 'bg-[#F0FDF4] text-[#15803D] border-transparent focus:border-[#86EFAC]',
-  Cancelled: 'bg-[#FEF2F2] text-[#DC2626] border-transparent focus:border-[#FCA5A5]',
+  Pending: 'bg-[#FFF7ED] text-[#C2410C]',
+  Done: 'bg-[#F0FDF4] text-[#15803D]',
+  Cancelled: 'bg-[#FEF2F2] text-[#DC2626]',
 };
 
 export function ClientsPage() {
@@ -23,11 +29,10 @@ export function ClientsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ClientItem | null>(null);
   const [fullName, setFullName] = useState('');
-  const [orderItem, setOrderItem] = useState('');
-  const [quantity, setQuantity] = useState('1');
-  const [totalPrice, setTotalPrice] = useState('0');
-  const [hasReservation, setHasReservation] = useState(false);
-  const [reservationFee, setReservationFee] = useState('100');
+  const [orderItem, setOrderItem] = useState('N/A');
+  const [quantity, setQuantity] = useState('N/A');
+  const [totalPrice, setTotalPrice] = useState('N/A');
+  const [reservationFee, setReservationFee] = useState('N/A');
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [orderStatus, setOrderStatus] = useState<ClientOrderStatus>('Pending');
   const [formError, setFormError] = useState<string | null>(null);
@@ -67,33 +72,24 @@ export function ClientsPage() {
   function openForm(client?: ClientItem) {
     setEditing(client ?? null);
     setFullName(client?.fullName ?? '');
-    setOrderItem(client?.orderItem ?? '');
-    setQuantity(String(client?.quantity ?? 1));
-    setTotalPrice(String(client?.totalPrice ?? 0));
-    const existingRes = typeof client?.reservationFee === 'number' && client.reservationFee > 0;
-    setHasReservation(existingRes);
-    setReservationFee(String(existingRes ? client!.reservationFee : 100));
+    setOrderItem(client?.orderItem?.trim() ? client.orderItem : 'N/A');
+    setQuantity(client ? String(client.quantity ?? 1) : 'N/A');
+    setTotalPrice(
+      typeof client?.totalPrice === 'number' && client.totalPrice > 0
+        ? String(client.totalPrice)
+        : 'N/A',
+    );
+    setReservationFee(
+      typeof client?.reservationFee === 'number' && client.reservationFee > 0
+        ? String(client.reservationFee)
+        : 'N/A',
+    );
     setOrderDate(
       client?.orderDate ?? (client?.createdAt.slice(0, 10) || new Date().toISOString().slice(0, 10)),
     );
     setOrderStatus(client?.orderStatus ?? 'Pending');
     setFormError(null);
     setFormOpen(true);
-  }
-
-  async function handleQuickStatusChange(client: ClientItem, nextStatus: ClientOrderStatus) {
-    try {
-      await apiRequest(`/api/admin/clients/${encodeURIComponent(client.id)}`, {
-        method: 'PATCH',
-        body: {
-          fullName: client.fullName,
-          orderStatus: nextStatus,
-        },
-      });
-      await loadClients();
-    } catch {
-      await loadClients();
-    }
   }
 
   async function handleSaveClient(e: FormEvent) {
@@ -105,16 +101,18 @@ export function ClientsPage() {
       return;
     }
 
-    const qtyNum = Math.max(1, Math.round(Number(quantity) || 1));
-    const priceNum = Math.max(0, Number(totalPrice) || 0);
-    const resFeeVal = hasReservation ? Math.max(0, Number(reservationFee) || 0) : null;
+    const qtyNum = isBlankOrNA(quantity) ? 1 : Math.max(1, Math.round(Number(quantity) || 1));
+    const priceNum = isBlankOrNA(totalPrice) ? 0 : Math.max(0, Number(totalPrice) || 0);
+    const parsedRes = isBlankOrNA(reservationFee) ? 0 : Number(reservationFee);
+    const resFeeVal =
+      Number.isFinite(parsedRes) && parsedRes > 0 ? Math.max(0, parsedRes) : null;
 
     try {
       const payload = {
         fullName: fullName.trim(),
         contactInfo: editing?.contactInfo ?? '',
         notes: editing?.notes ?? '',
-        orderItem: orderItem.trim(),
+        orderItem: isBlankOrNA(orderItem) ? '' : orderItem.trim(),
         quantity: qtyNum,
         totalPrice: priceNum,
         reservationFee: resFeeVal,
@@ -183,7 +181,7 @@ export function ClientsPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#0F172A]">Client Records</h1>
-          <p className="mt-1 text-sm text-[#64748B]">Here are your client records</p>
+          <p className="mt-1 text-sm text-[#64748B]">View all client records and orders in one place</p>
         </div>
         <button type="button" onClick={() => openForm()} className="btn-admin-green">
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -200,141 +198,130 @@ export function ClientsPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          placeholder="Search client or inquiry item..."
+          placeholder="Search client, inquiry number, or item..."
           aria-label="Search client records"
           className="h-10 w-full rounded-xl border border-[#EAE6DF] bg-white pl-10 pr-4 text-sm text-[#0F172A]"
         />
       </div>
 
-      {/* Spanned Pending Client Records Table */}
-      <div className="w-full overflow-x-auto rounded-2xl border border-[#EAE6DF] bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-[#F1F5F9] text-xs font-semibold text-[#64748B]">
-            <tr>
-              <th className="px-4 py-3.5">Name</th>
-              <th className="px-4 py-3.5">Inquiry Item</th>
-              <th className="px-4 py-3.5">Quantity</th>
-              <th className="px-4 py-3.5">Total Price</th>
-              <th className="px-4 py-3.5">Reservation Fee</th>
-              <th className="px-4 py-3.5">Inquiry Date</th>
-              <th className="px-4 py-3.5">Status</th>
-              <th className="px-4 py-3.5 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#F1F5F9]">
-            {clients.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-5 py-16 text-center text-base text-[#64748B]">
-                  No pending client records right now.
-                </td>
-              </tr>
-            ) : (
-              clients.map((client) => {
-                const st: ClientOrderStatus = client.orderStatus ?? 'Pending';
-                return (
-                  <tr
-                    key={client.id}
-                    onClick={() => void inspectClient(client.id)}
-                    className="hover:bg-[#F8FAFC] cursor-pointer"
-                  >
-                    <td className="px-4 py-3.5">
-                      <p className="font-semibold text-[#0F172A]">{client.fullName}</p>
-                      {client.contactInfo && (
-                        <p className="text-xs text-[#64748B] tabular-nums">
-                          {client.contactInfo.replace(/\s*·\s*/g, '  ')}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-[#0F172A]">
-                      {client.orderItem || '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-[#0F172A] tabular-nums">
-                      {client.quantity ?? 1}
-                    </td>
-                    <td className="px-4 py-3.5 font-semibold text-[#0F172A] tabular-nums">
-                      {typeof client.totalPrice === 'number' && client.totalPrice > 0
-                        ? `₱${client.totalPrice.toLocaleString()}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-sm text-[#0F172A] tabular-nums">
-                      {typeof client.reservationFee === 'number' && client.reservationFee > 0
-                        ? `₱${client.reservationFee.toLocaleString()}`
-                        : 'No'}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-[#64748B] tabular-nums">
-                      {client.orderDate ?? client.createdAt.slice(0, 10)}
-                    </td>
-                    <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        aria-label={`Status for ${client.fullName}`}
-                        value={st}
-                        onChange={(e) =>
-                          void handleQuickStatusChange(client, e.target.value as ClientOrderStatus)
-                        }
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold cursor-pointer ${ORDER_STATUS_STYLE[st]}`}
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Done">Done</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openForm(client)}
-                          aria-label={`Edit ${client.fullName}`}
-                          className="rounded-lg p-2 text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] active:bg-[#E0F2FE] active:text-[#0284C7] cursor-pointer"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteTarget(client);
-                            setNeedsPin(false);
-                            setReauthPin('');
-                            setDeleteError(null);
-                          }}
-                          aria-label={`Delete ${client.fullName}`}
-                          className="rounded-lg p-2 text-[#64748B] hover:bg-[#FEF2F2] hover:text-[#DC2626] cursor-pointer"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-
-        {total > 15 && (
-          <div className="flex items-center justify-between border-t border-[#F1F5F9] px-5 py-3 text-xs text-[#64748B]">
-            <span>
-              Page {page} of {totalPages}
+      {/* Client Records Table Card */}
+      <div className="w-full overflow-hidden rounded-2xl border border-[#EAE6DF] bg-white">
+        <div className="flex items-center justify-between border-b border-[#F1F5F9] px-5 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-sm font-semibold text-[#0F172A]">All Client</h2>
+            <span className="inline-flex items-center rounded-full border border-[#E2E8F0] bg-[#F8FAFC] px-2.5 py-0.5 text-xs font-medium text-[#475569] tabular-nums">
+              {total} {total === 1 ? 'client' : 'clients'}
             </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="btn-admin-green py-1 px-2.5 text-xs"
-              >
-                Prev
-              </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="btn-admin-green py-1 px-2.5 text-xs"
-              >
-                Next
-              </button>
-            </div>
           </div>
-        )}
+        </div>
+
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-[#F1F5F9] text-xs font-semibold text-[#64748B]">
+              <tr>
+                <th className="px-5 py-3.5 whitespace-nowrap">Inquiry number</th>
+                <th className="px-4 py-3.5">Name</th>
+                <th className="px-4 py-3.5">Inquiry Item</th>
+                <th className="px-4 py-3.5">Quantity</th>
+                <th className="px-4 py-3.5">Total Price</th>
+                <th className="px-4 py-3.5">Reservation Fee</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">Inquiry Date</th>
+                <th className="px-4 py-3.5">Status</th>
+                <th className="px-5 py-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F1F5F9]">
+              {clients.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-5 py-16 text-center text-base text-[#64748B]">
+                    No pending client records right now.
+                  </td>
+                </tr>
+              ) : (
+                clients.map((client) => {
+                  const st: ClientOrderStatus = client.orderStatus ?? 'Pending';
+                  return (
+                    <tr
+                      key={client.id}
+                      onClick={() => void inspectClient(client.id)}
+                      className="hover:bg-[#F8FAFC] cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5 text-xs font-semibold text-[#0F172A] tabular-nums whitespace-nowrap">
+                        {client.referenceCode || `CL-${client.id.slice(0, 6).toUpperCase()}`}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <p className="font-semibold text-[#0F172A]">{client.fullName}</p>
+                        {client.contactInfo && (
+                          <p className="text-xs text-[#64748B] tabular-nums">
+                            {client.contactInfo.replace(/\s*·\s*/g, '  ')}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 text-sm text-[#0F172A]">
+                        {client.orderItem?.trim() || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3.5 text-sm text-[#0F172A] tabular-nums">
+                        {client.quantity ?? 'N/A'}
+                      </td>
+                      <td className="px-4 py-3.5 font-semibold text-[#0F172A] tabular-nums">
+                        {typeof client.totalPrice === 'number' && client.totalPrice > 0
+                          ? `₱${client.totalPrice.toLocaleString()}`
+                          : 'N/A'}
+                      </td>
+                      <td className="px-4 py-3.5 text-sm text-[#0F172A] tabular-nums">
+                        {typeof client.reservationFee === 'number' && client.reservationFee > 0
+                          ? `₱${client.reservationFee.toLocaleString()}`
+                          : 'N/A'}
+                      </td>
+                      <td className="px-4 py-3.5 text-xs text-[#64748B] tabular-nums whitespace-nowrap">
+                        {client.orderDate ?? client.createdAt.slice(0, 10)}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span
+                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${ORDER_STATUS_STYLE[st]}`}
+                        >
+                          {st === 'Done' ? 'Completed' : st}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openForm(client)}
+                            aria-label={`Edit ${client.fullName}`}
+                            className="rounded-lg p-2 text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] active:bg-[#E0F2FE] active:text-[#0284C7] cursor-pointer"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteTarget(client);
+                              setNeedsPin(false);
+                              setReauthPin('');
+                              setDeleteError(null);
+                            }}
+                            aria-label={`Delete ${client.fullName}`}
+                            className="rounded-lg p-2 text-[#64748B] hover:bg-[#FEF2F2] hover:text-[#DC2626] cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <TablePaginationFooter
+          page={page}
+          totalPages={totalPages}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+        />
       </div>
 
       {/* Client History Detail Modal */}
@@ -443,8 +430,14 @@ export function ClientsPage() {
                 <input
                   id="client-order-item"
                   value={orderItem}
+                  onFocus={() => {
+                    if (isBlankOrNA(orderItem)) setOrderItem('');
+                  }}
+                  onBlur={() => {
+                    if (!orderItem.trim()) setOrderItem('N/A');
+                  }}
                   onChange={(e) => setOrderItem(e.target.value)}
-                  placeholder="e.g., A4 Sintra Box, KeyChain"
+                  placeholder="N/A"
                   className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E8F0] px-3.5 text-sm"
                 />
               </div>
@@ -456,11 +449,17 @@ export function ClientsPage() {
                   </label>
                   <input
                     id="client-qty"
-                    type="number"
-                    min={1}
-                    max={9999}
+                    type="text"
+                    inputMode="numeric"
                     value={quantity}
+                    onFocus={() => {
+                      if (isBlankOrNA(quantity)) setQuantity('');
+                    }}
+                    onBlur={() => {
+                      if (!quantity.trim()) setQuantity('N/A');
+                    }}
                     onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ''))}
+                    placeholder="N/A"
                     className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E8F0] px-3.5 text-sm tabular-nums"
                   />
                 </div>
@@ -470,52 +469,41 @@ export function ClientsPage() {
                   </label>
                   <input
                     id="client-price"
-                    type="number"
-                    min={0}
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={totalPrice}
-                    onChange={(e) => setTotalPrice(e.target.value)}
+                    onFocus={() => {
+                      if (isBlankOrNA(totalPrice)) setTotalPrice('');
+                    }}
+                    onBlur={() => {
+                      if (!totalPrice.trim()) setTotalPrice('N/A');
+                    }}
+                    onChange={(e) => setTotalPrice(e.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder="N/A"
                     className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E8F0] px-3.5 text-sm tabular-nums"
                   />
                 </div>
               </div>
 
               <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-[#0F172A]">Reservation Fee</span>
-                  <div className="inline-flex rounded-lg border border-[#E2E8F0] p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setHasReservation(false)}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer ${
-                        !hasReservation ? 'bg-[#38BDF8] text-[#0F172A]' : 'text-[#64748B] hover:bg-[#F1F5F9]'
-                      }`}
-                    >
-                      No
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setHasReservation(true)}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer ${
-                        hasReservation ? 'bg-[#38BDF8] text-[#0F172A]' : 'text-[#64748B] hover:bg-[#F1F5F9]'
-                      }`}
-                    >
-                      Yes
-                    </button>
-                  </div>
-                </div>
-                {hasReservation && (
-                  <input
-                    type="number"
-                    min={0}
-                    step="1"
-                    aria-label="Reservation fee amount (₱)"
-                    value={reservationFee}
-                    onChange={(e) => setReservationFee(e.target.value)}
-                    placeholder="Reservation amount (₱)"
-                    className="mt-2 h-11 w-full rounded-xl border border-[#E2E8F0] px-3.5 text-sm tabular-nums"
-                  />
-                )}
+                <label htmlFor="client-reservation" className="block text-xs font-semibold text-[#0F172A]">
+                  Reservation Fee (₱)
+                </label>
+                <input
+                  id="client-reservation"
+                  type="text"
+                  inputMode="decimal"
+                  value={reservationFee}
+                  onFocus={() => {
+                    if (isBlankOrNA(reservationFee)) setReservationFee('');
+                  }}
+                  onBlur={() => {
+                    if (!reservationFee.trim()) setReservationFee('N/A');
+                  }}
+                  onChange={(e) => setReservationFee(e.target.value.replace(/[^0-9.]/g, ''))}
+                  placeholder="N/A"
+                  className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E8F0] px-3.5 text-sm tabular-nums"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -542,7 +530,7 @@ export function ClientsPage() {
                     className="mt-1.5 h-11 w-full rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm"
                   >
                     <option value="Pending">Pending</option>
-                    <option value="Done">Done</option>
+                    <option value="Done">Completed</option>
                     <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>

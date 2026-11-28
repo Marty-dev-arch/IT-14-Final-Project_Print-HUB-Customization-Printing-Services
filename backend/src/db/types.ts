@@ -100,6 +100,8 @@ export interface InquiryRecord {
   adminSeenAt?: string | null;
   acceptedAt?: string | null;
   archivedToHistory?: boolean;
+  isArchived?: boolean;
+  isBlocked?: boolean;
   status: InquiryStatus;
   submittedAt: string;
   updatedAt: string;
@@ -190,6 +192,10 @@ export interface BackendStore {
   markInquirySeen(id: string): Promise<InquiryRecord | null>;
   acceptInquiry(id: string): Promise<{ inquiry: InquiryRecord; client: CustomerRecord | null } | null>;
   archiveInquiryToHistory(id: string): Promise<InquiryRecord | null>;
+  setInquiryArchive(id: string, archived: boolean): Promise<InquiryRecord | null>;
+  setInquiryBlock(id: string, blocked: boolean): Promise<InquiryRecord | null>;
+  deleteInquiry(id: string): Promise<boolean>;
+  isCustomerBlocked(input: { email?: string; name?: string; contact?: string }): Promise<boolean>;
   setInquiryReservation(id: string, reservationFee: number | null): Promise<InquiryRecord | null>;
   addInquiryResponse(input: {
     inquiryId: string;

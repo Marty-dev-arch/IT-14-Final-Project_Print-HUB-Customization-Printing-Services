@@ -125,8 +125,18 @@ function extractEmailFromText(value: string): string {
 }
 
 function extractPhoneDigits(value: string): string {
-  const match = /0\d{9,10}/.exec(value.replace(/[\s()-]/g, ''));
+  const cleaned = value.replace(/[\s()-]/g, '').replace(/(?:\+?63)(9\d{9})/g, '0$1');
+  const match = /0\d{9,10}/.exec(cleaned);
   return match?.[0] ?? '';
+}
+
+function mergePhoneIntoContact(existing: string, candidateText: string): string {
+  const foundPhone = extractPhoneDigits(candidateText);
+  if (!foundPhone) return existing;
+  if (extractPhoneDigits(existing) === foundPhone || existing.includes(foundPhone)) {
+    return existing;
+  }
+  return existing ? `${foundPhone} · ${existing}` : foundPhone;
 }
 
 function stripLegacyDotEmail(value: string): string {
@@ -574,10 +584,12 @@ export class LocalFileStore implements BackendStore {
     const emailNorm = input.email ? stripLegacyDotEmail(input.email.trim().toLowerCase()) : '';
     const pricing = computeInquiryPricing(input);
     const rawContactTrimmed = input.contactInfo.trim();
-    const contactSnapshot =
+    const contactSnapshot = mergePhoneIntoContact(
       emailNorm && !rawContactTrimmed.toLowerCase().includes(emailNorm)
         ? `${rawContactTrimmed} · ${emailNorm}`
-        : rawContactTrimmed || emailNorm;
+        : rawContactTrimmed || emailNorm,
+      input.message,
+    );
 
     const incomingIdentity = {
       name: input.customerName.trim(),
@@ -619,6 +631,9 @@ export class LocalFileStore implements BackendStore {
         customer.reservationFee = pricing.reservationFee;
       }
       customer.orderDate = now.slice(0, 10);
+      if (extractPhoneDigits(contactSnapshot)) {
+        customer.contactInfo = mergePhoneIntoContact(customer.contactInfo, contactSnapshot);
+      }
       if (!wasPending) {
         customer.orderStatus = 'Pending';
         customer.statusUpdatedAt = now;
@@ -923,6 +938,62 @@ export class LocalFileStore implements BackendStore {
     return next;
   }
 
+  async setInquiryArchive(id: string, archived: boolean): Promise<InquiryRecord | null> {
+    const idx = this.data.inquiries.findIndex((i) => i.id === id);
+    if (idx < 0) return null;
+    const prev = this.data.inquiries[idx]!;
+    const now = new Date().toISOString();
+    const next: InquiryRecord = {
+      ...prev,
+      adminSeenAt: prev.adminSeenAt ?? now,
+      isArchived: archived,
+      archivedToHistory: archived ? prev.archivedToHistory : false,
+      updatedAt: now,
+    };
+    this.data.inquiries[idx] = next;
+    this.persist();
+    return next;
+  }
+
+  async setInquiryBlock(id: string, blocked: boolean): Promise<InquiryRecord | null> {
+    const idx = this.data.inquiries.findIndex((i) => i.id === id);
+    if (idx < 0) return null;
+    const prev = this.data.inquiries[idx]!;
+    const now = new Date().toISOString();
+    const next: InquiryRecord = {
+      ...prev,
+      adminSeenAt: prev.adminSeenAt ?? now,
+      isBlocked: blocked,
+      updatedAt: now,
+    };
+    this.data.inquiries[idx] = next;
+    this.persist();
+    return next;
+  }
+
+  async deleteInquiry(id: string): Promise<boolean> {
+    const exists = this.data.inquiries.some((i) => i.id === id);
+    if (!exists) return false;
+    this.data.inquiries = this.data.inquiries.filter((i) => i.id !== id);
+    this.persist();
+    return true;
+  }
+
+  async isCustomerBlocked(input: { email?: string; name?: string; contact?: string }): Promise<boolean> {
+    return this.data.inquiries.some(
+      (i) =>
+        Boolean(i.isBlocked) &&
+        sameCustomerIdentity(
+          {
+            name: i.customerNameSnapshot,
+            email: i.customerEmail,
+            contact: i.customerContactSnapshot,
+          },
+          input,
+        ),
+    );
+  }
+
   async setInquiryReservation(id: string, reservationFee: number | null): Promise<InquiryRecord | null> {
     const idx = this.data.inquiries.findIndex((i) => i.id === id);
     if (idx < 0) return null;
@@ -984,8 +1055,10 @@ export class LocalFileStore implements BackendStore {
     let nextOrderItem = current.orderItem || resolveServiceDisplayName(current.serviceId);
     let nextQuantity = current.quantity ?? 1;
     let nextTotalPrice = current.totalPrice ?? 0;
+    let nextContactSnapshot = current.customerContactSnapshot;
 
     if (input.senderRole === 'customer') {
+      nextContactSnapshot = mergePhoneIntoContact(nextContactSnapshot, input.responseText);
       const explicitNames: string[] = [];
       if (input.serviceNames && input.serviceNames.length > 0) {
         explicitNames.push(...input.serviceNames);
@@ -1018,6 +1091,7 @@ export class LocalFileStore implements BackendStore {
 
     const updated: InquiryRecord = {
       ...current,
+      customerContactSnapshot: nextContactSnapshot,
       status: nextStatus,
       orderItem: nextOrderItem,
       quantity: nextQuantity,
@@ -1025,6 +1099,7 @@ export class LocalFileStore implements BackendStore {
       adminSeenAt: input.senderRole === 'admin' ? now : current.adminSeenAt,
       acceptedAt: input.senderRole === 'admin' ? (current.acceptedAt ?? now) : current.acceptedAt,
       archivedToHistory: input.senderRole === 'customer' ? false : current.archivedToHistory,
+      isArchived: input.senderRole === 'customer' ? false : current.isArchived,
       updatedAt: now,
       responses: [...current.responses, response],
     };
@@ -1043,6 +1118,10 @@ export class LocalFileStore implements BackendStore {
           ),
         );
     if (targetClient) {
+      if (nextContactSnapshot !== targetClient.contactInfo && extractPhoneDigits(nextContactSnapshot)) {
+        targetClient.contactInfo = mergePhoneIntoContact(targetClient.contactInfo, nextContactSnapshot);
+        targetClient.updatedAt = now;
+      }
       if (input.senderRole === 'admin') {
         this.syncCustomerFromInquiry(targetClient, updated, now);
       } else if (nextOrderItem !== (current.orderItem || resolveServiceDisplayName(current.serviceId))) {
@@ -1428,6 +1507,8 @@ function mapInquiryRow(row: Record<string, unknown>, responses: InquiryResponseR
     adminSeenAt: (row.admin_seen_at as string | null) ?? null,
     acceptedAt: (row.accepted_at as string | null) ?? null,
     archivedToHistory: Boolean(row.archived_to_history),
+    isArchived: Boolean(row.is_archived),
+    isBlocked: Boolean(row.is_blocked),
     status: row.status as InquiryStatus,
     submittedAt: String(row.submitted_at),
     updatedAt: String(row.updated_at),
@@ -1671,10 +1752,12 @@ export class SupabaseStore implements BackendStore {
   }): Promise<InquiryRecord> {
     const emailNorm = input.email ? stripLegacyDotEmail(input.email.trim().toLowerCase()) : '';
     const rawContactTrimmed = input.contactInfo.trim();
-    const contactSnapshot =
+    const contactSnapshot = mergePhoneIntoContact(
       emailNorm && !rawContactTrimmed.toLowerCase().includes(emailNorm)
         ? `${rawContactTrimmed} · ${emailNorm}`
-        : rawContactTrimmed || emailNorm;
+        : rawContactTrimmed || emailNorm,
+      input.message,
+    );
     const pricing = computeInquiryPricing(input);
     const now = new Date().toISOString();
 
@@ -1990,6 +2073,60 @@ export class SupabaseStore implements BackendStore {
     return this.getInquiryById(id);
   }
 
+  async setInquiryArchive(id: string, archived: boolean): Promise<InquiryRecord | null> {
+    const now = new Date().toISOString();
+    let res = await this.db
+      .from('inquiries')
+      .update({ admin_seen_at: now, is_archived: archived, updated_at: now })
+      .eq('id', id);
+    if (res.error) {
+      res = await this.db
+        .from('inquiries')
+        .update({ admin_seen_at: now, archived_to_history: archived, updated_at: now })
+        .eq('id', id);
+    }
+    if (res.error) return null;
+    return this.getInquiryById(id);
+  }
+
+  async setInquiryBlock(id: string, blocked: boolean): Promise<InquiryRecord | null> {
+    const now = new Date().toISOString();
+    let res = await this.db
+      .from('inquiries')
+      .update({ admin_seen_at: now, is_blocked: blocked, updated_at: now })
+      .eq('id', id);
+    if (res.error) {
+      res = await this.db
+        .from('inquiries')
+        .update({ admin_seen_at: now, archived_to_history: blocked, updated_at: now })
+        .eq('id', id);
+    }
+    if (res.error) return null;
+    return this.getInquiryById(id);
+  }
+
+  async deleteInquiry(id: string): Promise<boolean> {
+    await this.db.from('responses').delete().eq('inquiry_id', id);
+    const { error } = await this.db.from('inquiries').delete().eq('id', id);
+    return !error;
+  }
+
+  async isCustomerBlocked(input: { email?: string; name?: string; contact?: string }): Promise<boolean> {
+    const all = await this.listInquiries();
+    return all.some(
+      (i) =>
+        Boolean(i.isBlocked) &&
+        sameCustomerIdentity(
+          {
+            name: i.customerNameSnapshot,
+            email: i.customerEmail,
+            contact: i.customerContactSnapshot,
+          },
+          input,
+        ),
+    );
+  }
+
   async setInquiryReservation(id: string, reservationFee: number | null): Promise<InquiryRecord | null> {
     const current = await this.getInquiryById(id);
     if (!current) return null;
@@ -2042,8 +2179,10 @@ export class SupabaseStore implements BackendStore {
     let nextOrderItem = current.orderItem || resolveServiceDisplayName(current.serviceId);
     let nextQuantity = current.quantity ?? 1;
     let nextTotalPrice = current.totalPrice ?? 0;
+    let nextContactSnapshot = current.customerContactSnapshot;
 
     if (input.senderRole === 'customer') {
+      nextContactSnapshot = mergePhoneIntoContact(nextContactSnapshot, input.responseText);
       const explicitNames: string[] = [];
       if (input.serviceNames && input.serviceNames.length > 0) {
         explicitNames.push(...input.serviceNames);

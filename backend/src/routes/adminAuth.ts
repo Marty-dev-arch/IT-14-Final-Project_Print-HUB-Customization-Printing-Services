@@ -31,6 +31,11 @@ const MAX_PIN_ATTEMPTS = 3;
 const COOLDOWN_MINUTES = 3;
 const pendingTotpEnroll = new Map<string, { secret: string; recoveryPlain: string[]; recoveryHashes: string[] }>();
 
+function formatIncorrectPinError(remaining: number): string {
+  const unit = remaining === 1 ? 'attempt' : 'attempts';
+  return `Incorrect 6-digit PIN. ${remaining} ${unit} remaining.`;
+}
+
 function setSessionCookies(res: Response, rawSessionToken: string, rawCsrfToken: string) {
   const isProd = process.env.NODE_ENV === 'production';
   const domain = process.env.COOKIE_DOMAIN?.trim() || undefined;
@@ -144,9 +149,10 @@ export function createAdminAuthRouter(store: BackendStore): Router {
         });
         return;
       }
+      const remaining = MAX_PIN_ATTEMPTS - failBucket.count;
       res.status(401).json({
-        error: `Incorrect 6-digit PIN (${MAX_PIN_ATTEMPTS - failBucket.count} attempt(s) remaining).`,
-        remainingAttempts: MAX_PIN_ATTEMPTS - failBucket.count,
+        error: formatIncorrectPinError(remaining),
+        remainingAttempts: remaining,
       });
       return;
     }
@@ -375,9 +381,10 @@ export function createAdminAuthRouter(store: BackendStore): Router {
           });
           return;
         }
+        const remaining = MAX_PIN_ATTEMPTS - nextPinFails;
         res.status(401).json({
-          error: `Incorrect 6-digit PIN (${MAX_PIN_ATTEMPTS - nextPinFails} attempt(s) remaining).`,
-          remainingAttempts: MAX_PIN_ATTEMPTS - nextPinFails,
+          error: formatIncorrectPinError(remaining),
+          remainingAttempts: remaining,
         });
         return;
       }

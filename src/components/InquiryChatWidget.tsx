@@ -12,7 +12,6 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Ban,
-  Bell,
   BellOff,
   Check,
   CheckCheck,
@@ -37,6 +36,7 @@ import { SERVICE_BY_ID } from '../data/services';
 import { formatDateTime } from '../lib/format';
 import { isValidEmail, isValidPhPhone, sanitizePhPhone, validateReplyText } from '../lib/validation';
 import type { Inquiry, ServiceItem } from '../types/domain';
+import { DuotoneBellIcon } from './DuotoneIcons';
 import { StatusBadge } from './StatusBadge';
 
 type IntakePrompt = 'service' | 'name' | 'phone' | 'details' | null;
@@ -1334,7 +1334,7 @@ export function InquiryChatWidget() {
                   className="flex w-full items-center gap-2.5 px-3.5 py-2 font-medium text-[#151515] hover:bg-[#F4F5F6] cursor-pointer"
                 >
                   {isMuted ? (
-                    <Bell className="h-4 w-4 text-[#525252]" aria-hidden="true" />
+                    <DuotoneBellIcon className="h-4 w-4 text-[#525252]" aria-hidden="true" />
                   ) : (
                     <BellOff className="h-4 w-4 text-[#525252]" aria-hidden="true" />
                   )}

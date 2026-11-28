@@ -8,9 +8,13 @@ import {
 } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Archive,
+  ArchiveRestore,
+  Ban,
   Check,
   ImagePlus,
   Inbox,
+  MoreVertical,
   Palette,
   Phone,
   Search,
@@ -22,7 +26,14 @@ import {
 import { ApiError, apiRequest, formatDateTime, SERVICE_NAMES } from '../lib/api';
 import type { ClientItem, InquiryItem } from '../types';
 
-type InboxTab = 'all' | 'history';
+type InboxTab = 'all' | 'requests' | 'archive' | 'history';
+
+const INBOX_TABS: ReadonlyArray<{ id: InboxTab; label: string; folder: string }> = [
+  { id: 'all', label: 'All Messages', folder: 'active' },
+  { id: 'requests', label: 'Message Requests', folder: 'requests' },
+  { id: 'archive', label: 'Archive', folder: 'archive' },
+  { id: 'history', label: 'Message History', folder: 'history' },
+];
 
 const BUBBLE_THEMES = [
   { id: 'sky', label: 'Sky Blue', bubbleBg: '#E0F2FE', bubbleText: '#0C4A6E', btnBg: '#0EA5E9' },
@@ -38,20 +49,46 @@ const ADMIN_EMOJIS = [0x1f44d, 0x1f60a, 0x1f64f, 0x2705, 0x1f4e6, 0x2728].map((c
 
 const THEME_STORAGE_KEY = 'rjhub_admin_chat_theme_v1';
 
-function isUnreadForAdmin(inq: InquiryItem): boolean {
+function countUnreadCustomerMessages(inq: InquiryItem): number {
   const lastAdminReply = [...inq.responses].reverse().find((r) => r.senderRole === 'admin');
-  const lastCustMsg = [...inq.responses].reverse().find((r) => r.senderRole === 'customer');
-  const latestCustMs = new Date(lastCustMsg ? lastCustMsg.respondedAt : inq.submittedAt).getTime();
-  if (lastAdminReply && new Date(lastAdminReply.respondedAt).getTime() >= latestCustMs) return false;
-  if (inq.adminSeenAt && new Date(inq.adminSeenAt).getTime() >= latestCustMs) return false;
-  return true;
+  const cutoffMs = Math.max(
+    lastAdminReply ? new Date(lastAdminReply.respondedAt).getTime() : 0,
+    inq.adminSeenAt ? new Date(inq.adminSeenAt).getTime() : 0,
+  );
+  const initialCount = new Date(inq.submittedAt).getTime() > cutoffMs ? 1 : 0;
+  const followUpCount = inq.responses.filter(
+    (r) => r.senderRole === 'customer' && new Date(r.respondedAt).getTime() > cutoffMs,
+  ).length;
+  return initialCount + followUpCount;
 }
 
-function splitContactParts(rawSnapshot: string, clientContact?: string): { email: string; phone: string } {
-  const source = clientContact ? `${clientContact} · ${rawSnapshot}` : rawSnapshot;
-  const normalized = source.replace(/google\.customer@gmail\.com/gi, 'googlecustomer@gmail.com');
-  const emailMatch = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(normalized);
-  const phoneMatch = /0\d{9,10}/.exec(normalized);
+function isUnreadForAdmin(inq: InquiryItem): boolean {
+  return countUnreadCustomerMessages(inq) > 0;
+}
+
+function splitContactParts(
+  inquiry: InquiryItem,
+  clientContact?: string,
+): { email: string; phone: string } {
+  const customerMsgTexts = inquiry.responses
+    .filter((r) => r.senderRole === 'customer')
+    .map((r) => r.responseText)
+    .join(' ');
+  const contactSource = [
+    clientContact ?? '',
+    inquiry.customerContactSnapshot,
+    inquiry.customerEmail ?? '',
+  ].join(' · ');
+  const fullPhoneSource = `${contactSource} · ${inquiry.message} · ${customerMsgTexts}`
+    .replace(/[\s()-]/g, '')
+    .replace(/(?:\+?63)(9\d{9})/g, '0$1');
+
+  const normalizedEmailSource = contactSource.replace(
+    /google\.customer@gmail\.com/gi,
+    'googlecustomer@gmail.com',
+  );
+  const emailMatch = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.exec(normalizedEmailSource);
+  const phoneMatch = /0\d{9,10}/.exec(fullPhoneSource);
   return {
     email: emailMatch?.[0]?.toLowerCase() ?? '',
     phone: phoneMatch?.[0] ?? '',
@@ -90,7 +127,7 @@ export function MessagesPage() {
   const [replyText, setReplyText] = useState('');
   const [replyImageDataUrl, setReplyImageDataUrl] = useState<string | undefined>(undefined);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [themeId, setThemeId] = useState<string>(() => {
     try {
       return window.localStorage.getItem(THEME_STORAGE_KEY) || 'sky';
@@ -102,18 +139,38 @@ export function MessagesPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  const [deleteConfirmMode, setDeleteConfirmMode] = useState<'history_all' | 'single' | null>(null);
   const [needsPin, setNeedsPin] = useState(false);
   const [reauthPin, setReauthPin] = useState('');
   const [clearError, setClearError] = useState<string | null>(null);
   const [clearingHistory, setClearingHistory] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
   const activeTheme = BUBBLE_THEMES.find((t) => t.id === themeId) ?? BUBBLE_THEMES[0];
 
+  useEffect(() => {
+    if (!settingsMenuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
+        setSettingsMenuOpen(false);
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSettingsMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [settingsMenuOpen]);
+
   const loadList = useCallback(async () => {
+    const folder = INBOX_TABS.find((t) => t.id === tab)?.folder ?? 'active';
     const qs = new URLSearchParams();
-    qs.set('folder', tab === 'history' ? 'history' : 'active');
+    qs.set('folder', folder);
     if (search.trim()) qs.set('search', search.trim());
     const data = await apiRequest<{ inquiries: InquiryItem[] }>(`/api/admin/inquiries?${qs.toString()}`);
     setInquiries(data.inquiries);
@@ -179,7 +236,7 @@ export function MessagesPage() {
 
   function selectTheme(id: string) {
     setThemeId(id);
-    setThemeMenuOpen(false);
+    setSettingsMenuOpen(false);
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, id);
     } catch {
@@ -209,6 +266,7 @@ export function MessagesPage() {
     if (!detail || actionBusy) return;
     setActionBusy(true);
     setError(null);
+    setSettingsMenuOpen(false);
     try {
       await apiRequest(`/api/admin/inquiries/${encodeURIComponent(detail.inquiry.id)}/accept`, {
         method: 'POST',
@@ -221,18 +279,51 @@ export function MessagesPage() {
     }
   }
 
-  async function handleDeclineInquiry() {
+  async function handleToggleArchive() {
     if (!detail || actionBusy) return;
     setActionBusy(true);
     setError(null);
+    setSettingsMenuOpen(false);
+    const nextArchived = !detail.inquiry.isArchived;
     try {
-      await apiRequest(`/api/admin/inquiries/${encodeURIComponent(detail.inquiry.id)}/decline`, {
+      await apiRequest(`/api/admin/inquiries/${encodeURIComponent(detail.inquiry.id)}/archive`, {
         method: 'POST',
+        body: { archived: nextArchived },
       });
-      setSelectedId('');
+      if (nextArchived && tab !== 'archive') {
+        setSelectedId('');
+        setDetail(null);
+      } else {
+        await loadDetail(detail.inquiry.id);
+      }
       await loadList();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to move message to history.');
+      setError(err instanceof Error ? err.message : 'Unable to update archive status.');
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleToggleBlock() {
+    if (!detail || actionBusy) return;
+    setActionBusy(true);
+    setError(null);
+    setSettingsMenuOpen(false);
+    const nextBlocked = !detail.inquiry.isBlocked;
+    try {
+      await apiRequest(`/api/admin/inquiries/${encodeURIComponent(detail.inquiry.id)}/block`, {
+        method: 'POST',
+        body: { blocked: nextBlocked },
+      });
+      if (nextBlocked && tab !== 'history') {
+        setSelectedId('');
+        setDetail(null);
+      } else {
+        await loadDetail(detail.inquiry.id);
+      }
+      await loadList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update block status.');
     } finally {
       setActionBusy(false);
     }
@@ -263,12 +354,15 @@ export function MessagesPage() {
     }
   }
 
-  async function handleClearMessageHistory(e: FormEvent) {
+  async function handleConfirmDeleteMessages(e: FormEvent) {
     e.preventDefault();
-    if (clearingHistory) return;
+    if (clearingHistory || !deleteConfirmMode) return;
     setClearingHistory(true);
     setClearError(null);
-    const endpoint = '/api/admin/inquiries/history/all';
+    const endpoint =
+      deleteConfirmMode === 'single' && detail
+        ? `/api/admin/inquiries/${encodeURIComponent(detail.inquiry.id)}`
+        : '/api/admin/inquiries/history/all';
     try {
       try {
         await apiRequest(endpoint, { method: 'DELETE' });
@@ -289,21 +383,27 @@ export function MessagesPage() {
           throw err;
         }
       }
-      setClearHistoryOpen(false);
+      setDeleteConfirmMode(null);
       setNeedsPin(false);
       setReauthPin('');
       setSelectedId('');
       setDetail(null);
       await loadList();
     } catch (err) {
-      setClearError(err instanceof Error ? err.message : 'Unable to delete message history.');
+      setClearError(
+        err instanceof Error
+          ? err.message
+          : deleteConfirmMode === 'single'
+            ? 'Unable to delete message.'
+            : 'Unable to delete message history.',
+      );
     } finally {
       setClearingHistory(false);
     }
   }
 
   const headerContact = detail
-    ? splitContactParts(detail.inquiry.customerContactSnapshot, detail.client?.contactInfo)
+    ? splitContactParts(detail.inquiry, detail.client?.contactInfo)
     : { email: '', phone: '' };
 
   return (
@@ -315,47 +415,42 @@ export function MessagesPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Message views">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'all'}
-            onClick={() => {
-              setTab('all');
-              searchParams.delete('status');
-              setSearchParams(searchParams, { replace: true });
-            }}
-            className={`rounded-xl border px-4 py-2 text-xs transition-colors cursor-pointer ${
-              tab === 'all'
-                ? 'border-[#38BDF8] bg-[#38BDF8] font-semibold text-[#0F172A]'
-                : 'border-[#E2E8F0] bg-white font-medium text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A] active:border-[#38BDF8] active:bg-[#E0F2FE] active:text-[#0284C7]'
-            }`}
-          >
-            All Messages
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'history'}
-            onClick={() => setTab('history')}
-            className={`rounded-xl border px-4 py-2 text-xs transition-colors cursor-pointer ${
-              tab === 'history'
-                ? 'border-[#38BDF8] bg-[#38BDF8] font-semibold text-[#0F172A]'
-                : 'border-[#E2E8F0] bg-white font-medium text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A] active:border-[#38BDF8] active:bg-[#E0F2FE] active:text-[#0284C7]'
-            }`}
-          >
-            Message History
-          </button>
+          {INBOX_TABS.map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => {
+                  setTab(t.id);
+                  if (t.id === 'all') {
+                    searchParams.delete('status');
+                    setSearchParams(searchParams, { replace: true });
+                  }
+                }}
+                className={`rounded-xl border px-4 py-2 text-xs transition-colors cursor-pointer ${
+                  active
+                    ? 'border-[#38BDF8] bg-[#38BDF8] font-semibold text-[#0F172A]'
+                    : 'border-[#E2E8F0] bg-white font-medium text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A] active:border-[#38BDF8] active:bg-[#E0F2FE] active:text-[#0284C7]'
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
           {tab === 'history' && (
             <button
               type="button"
               disabled={inquiries.length === 0}
               onClick={() => {
-                setClearHistoryOpen(true);
+                setDeleteConfirmMode('history_all');
                 setNeedsPin(false);
                 setReauthPin('');
                 setClearError(null);
               }}
-              className={`btn-admin-danger py-2 px-3.5 text-xs ${clearHistoryOpen ? 'is-active' : ''}`}
+              className={`btn-admin-danger py-2 px-3.5 text-xs ${deleteConfirmMode === 'history_all' ? 'is-active' : ''}`}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               Delete All
@@ -386,13 +481,20 @@ export function MessagesPage() {
               <div className="flex flex-col items-center justify-center p-12 text-center">
                 <Inbox className="h-6 w-6 text-[#94A3B8]" strokeWidth={1.5} />
                 <p className="mt-2 text-sm font-medium text-[#0F172A]">
-                  {tab === 'history' ? 'No archived message history yet' : 'No active customer messages'}
+                  {tab === 'history'
+                    ? 'No archived message history yet'
+                    : tab === 'archive'
+                      ? 'No archived conversations yet'
+                      : tab === 'requests'
+                        ? 'No pending message requests'
+                        : 'No active customer messages'}
                 </p>
               </div>
             ) : (
               inquiries.map((inq) => {
                 const active = inq.id === selectedId;
-                const unread = isUnreadForAdmin(inq);
+                const unreadCount = countUnreadCustomerMessages(inq);
+                const unread = unreadCount > 0;
                 const lastResp = inq.responses[inq.responses.length - 1];
                 const rawPreview = lastResp
                   ? lastResp.responseText || 'Sent a photo'
@@ -430,13 +532,20 @@ export function MessagesPage() {
                           {formatDateTime(inq.updatedAt)}
                         </span>
                       </div>
-                      <p
-                        className={`mt-1 truncate text-xs ${
-                          unread ? 'font-bold text-[#0A0A0A]' : 'font-normal text-[#64748B]'
-                        }`}
-                      >
-                        {previewText}
-                      </p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p
+                          className={`truncate text-xs ${
+                            unread ? 'font-bold text-[#0A0A0A]' : 'font-normal text-[#64748B]'
+                          }`}
+                        >
+                          {previewText}
+                        </p>
+                        {unreadCount >= 2 && (
+                          <span className="inline-flex shrink-0 items-center rounded-md bg-[#0A0A0A] px-2 py-0.5 text-[10px] font-semibold text-white tabular-nums">
+                            {unreadCount} new messages
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 );
@@ -474,77 +583,147 @@ export function MessagesPage() {
                       {headerContact.email && <span>{headerContact.email}</span>}
                     </p>
                     {headerContact.phone && (
-                      <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-[#334155] tabular-nums">
+                      <a
+                        href={`tel:${headerContact.phone}`}
+                        title={`Call ${headerContact.phone}`}
+                        className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[#334155] tabular-nums transition-colors hover:text-[#0284C7] hover:underline"
+                      >
                         <Phone className="h-3.5 w-3.5 shrink-0 text-[#0F172A]" aria-hidden="true" />
                         <span>({headerContact.phone})</span>
-                      </p>
+                      </a>
                     )}
                   </div>
                 </div>
 
-                {/* Theme Picker + Check (Accept) / X (Decline to History) */}
-                <div className="relative flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setThemeMenuOpen((prev) => !prev)}
-                    aria-label="Customize message theme color"
-                    title="Customize theme color"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A] active:border-[#38BDF8] active:bg-[#E0F2FE] active:text-[#0284C7] cursor-pointer"
-                  >
-                    <Palette className="h-4 w-4" aria-hidden="true" />
-                  </button>
-
-                  {themeMenuOpen && (
-                    <div
-                      role="menu"
-                      aria-label="Message theme swatches"
-                      className="absolute right-0 top-11 z-20 flex items-center gap-2 rounded-xl border border-[#EAE6DF] bg-white p-2.5 shadow-lg"
-                    >
-                      {BUBBLE_THEMES.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => selectTheme(t.id)}
-                          aria-label={`Select ${t.label} theme`}
-                          title={t.label}
-                          style={{ backgroundColor: t.btnBg }}
-                          className={`h-6 w-6 rounded-full cursor-pointer transition-transform hover:scale-110 ${
-                            themeId === t.id ? 'ring-2 ring-offset-2 ring-[#0F172A]' : ''
-                          }`}
-                        />
-                      ))}
-                    </div>
+                {/* Status Badge + 3-Dot Conversation Settings (Message Request + Theme Color) */}
+                <div ref={menuContainerRef} className="relative flex items-center gap-2">
+                  {detail.inquiry.isBlocked && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-semibold text-[#DC2626]">
+                      <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                      Blocked
+                    </span>
                   )}
-
-                  {!detail.inquiry.acceptedAt ? (
-                    <button
-                      type="button"
-                      disabled={actionBusy}
-                      onClick={() => void handleAcceptInquiry()}
-                      aria-label="Accept inquiry"
-                      title="Accept inquiry into Client Records"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#15803D] hover:bg-[#F1F5F9] active:border-[#38BDF8] active:bg-[#E0F2FE] disabled:opacity-50 cursor-pointer"
-                    >
-                      <Check className="h-4 w-4 stroke-[2.2]" aria-hidden="true" />
-                    </button>
-                  ) : (
+                  {detail.inquiry.isArchived && !detail.inquiry.isBlocked && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2.5 py-1 text-xs font-semibold text-[#475569]">
+                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                      Archived
+                    </span>
+                  )}
+                  {detail.inquiry.acceptedAt && !detail.inquiry.isBlocked && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#F0FDF4] px-2.5 py-1 text-xs font-semibold text-[#15803D]">
                       <Check className="h-3.5 w-3.5" aria-hidden="true" />
                       Accepted
                     </span>
                   )}
 
-                  {!detail.inquiry.archivedToHistory && (
-                    <button
-                      type="button"
-                      disabled={actionBusy}
-                      onClick={() => void handleDeclineInquiry()}
-                      aria-label="Remove message to history"
-                      title="Move to Message History"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#DC2626] hover:bg-[#F1F5F9] active:border-[#38BDF8] active:bg-[#E0F2FE] disabled:opacity-50 cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={() => setSettingsMenuOpen((prev) => !prev)}
+                    aria-label="Conversation settings"
+                    aria-expanded={settingsMenuOpen}
+                    aria-haspopup="menu"
+                    title="Message settings"
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+                      settingsMenuOpen
+                        ? 'border-[#38BDF8] bg-[#E0F2FE] text-[#0284C7]'
+                        : 'border-[#E2E8F0] bg-white text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A]'
+                    }`}
+                  >
+                    <MoreVertical className="h-4 w-4" aria-hidden="true" />
+                  </button>
+
+                  {settingsMenuOpen && (
+                    <div
+                      role="menu"
+                      aria-label="Conversation settings menu"
+                      className="absolute right-0 top-11 z-30 w-60 overflow-hidden rounded-2xl border border-[#EAE6DF] bg-white p-1.5 shadow-xl"
                     >
-                      <X className="h-4 w-4 stroke-[2.2]" aria-hidden="true" />
-                    </button>
+                      <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#94A3B8]">
+                        Message Request
+                      </p>
+
+                      {!detail.inquiry.acceptedAt && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={actionBusy}
+                          onClick={() => void handleAcceptInquiry()}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-[#15803D] hover:bg-[#F0FDF4] disabled:opacity-50 cursor-pointer"
+                        >
+                          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          Accept
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={actionBusy}
+                        onClick={() => void handleToggleArchive()}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-[#334155] hover:bg-[#F8FAFC] hover:text-[#0F172A] disabled:opacity-50 cursor-pointer"
+                      >
+                        {detail.inquiry.isArchived ? (
+                          <ArchiveRestore className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <Archive className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        )}
+                        {detail.inquiry.isArchived ? 'Unarchive' : 'Archive'}
+                      </button>
+
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={actionBusy}
+                        onClick={() => void handleToggleBlock()}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-[#B45309] hover:bg-[#FFFBEB] disabled:opacity-50 cursor-pointer"
+                      >
+                        <Ban className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        {detail.inquiry.isBlocked ? 'Unblock Customer' : 'Block Customer'}
+                      </button>
+
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={actionBusy}
+                        onClick={() => {
+                          setSettingsMenuOpen(false);
+                          setDeleteConfirmMode('single');
+                          setNeedsPin(false);
+                          setReauthPin('');
+                          setClearError(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-[#DC2626] hover:bg-[#FEF2F2] disabled:opacity-50 cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        Delete
+                      </button>
+
+                      <div className="my-1.5 border-t border-[#F1F5F9]" />
+
+                      <div className="px-3 py-1.5">
+                        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#94A3B8]">
+                          <Palette className="h-3.5 w-3.5" aria-hidden="true" />
+                          Theme Color
+                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          {BUBBLE_THEMES.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={themeId === t.id}
+                              onClick={() => selectTheme(t.id)}
+                              aria-label={`Select ${t.label} theme`}
+                              title={t.label}
+                              style={{ backgroundColor: t.btnBg }}
+                              className={`h-6 w-6 rounded-full cursor-pointer transition-transform hover:scale-110 ${
+                                themeId === t.id ? 'ring-2 ring-offset-2 ring-[#0F172A]' : ''
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -689,22 +868,27 @@ export function MessagesPage() {
         </div>
       </div>
 
-      {clearHistoryOpen && (
+      {deleteConfirmMode && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1px]"
           role="dialog"
           aria-modal="true"
-          onClick={() => setClearHistoryOpen(false)}
+          onClick={() => setDeleteConfirmMode(null)}
         >
           <form
-            onSubmit={handleClearMessageHistory}
+            onSubmit={handleConfirmDeleteMessages}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-md rounded-2xl border border-[#EAE6DF] bg-white p-6 space-y-4 shadow-xl"
           >
-            <h2 className="text-lg font-bold text-[#0F172A]">Delete All Message History?</h2>
+            <h2 className="text-lg font-bold text-[#0F172A]">
+              {deleteConfirmMode === 'single'
+                ? 'Delete Customer Conversation?'
+                : 'Delete All Message History?'}
+            </h2>
             <p className="text-sm leading-relaxed text-[#64748B]">
-              This permanently clears all archived and replied inquiry conversations from Message
-              History.
+              {deleteConfirmMode === 'single'
+                ? `This permanently deletes the message conversation with ${detail?.inquiry.customerNameSnapshot ?? 'this customer'}.`
+                : 'This permanently clears all archived and replied inquiry conversations from Message History.'}
             </p>
             {clearError && <p className="text-xs font-medium text-[#DC2626]">{clearError}</p>}
             {needsPin && (
@@ -722,7 +906,7 @@ export function MessagesPage() {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setClearHistoryOpen(false)}
+                onClick={() => setDeleteConfirmMode(null)}
                 className="rounded-xl border border-[#E2E8F0] px-4 py-2 text-sm text-[#64748B] hover:bg-[#F1F5F9] cursor-pointer"
               >
                 Cancel
@@ -732,7 +916,11 @@ export function MessagesPage() {
                 disabled={clearingHistory}
                 className="rounded-xl bg-[#DC2626] px-4 py-2 text-sm font-semibold text-white hover:bg-[#B91C1C] disabled:opacity-60 cursor-pointer"
               >
-                {clearingHistory ? 'Deleting...' : 'Delete All'}
+                {clearingHistory
+                  ? 'Deleting...'
+                  : deleteConfirmMode === 'single'
+                    ? 'Delete'
+                    : 'Delete All'}
               </button>
             </div>
           </form>

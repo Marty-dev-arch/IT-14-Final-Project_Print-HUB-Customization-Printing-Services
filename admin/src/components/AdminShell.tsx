@@ -2,24 +2,26 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   ChevronDown,
-  ClipboardList,
   HelpCircle,
-  Home,
-  Inbox,
   LogOut,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Users,
   X,
 } from 'lucide-react';
+import {
+  DuotoneClientsIcon,
+  DuotoneHomeIcon,
+  DuotoneMessageIcon,
+  DuotoneReceiptIcon,
+} from './DuotoneIcons';
 import { useAdminAuth } from '../context/AdminAuthContext';
 
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: Home },
-  { to: '/messages', label: 'Message Management', icon: Inbox },
-  { to: '/clients', label: 'Client Records', icon: Users },
-  { to: '/logs', label: 'Logs', icon: ClipboardList },
+  { to: '/dashboard', label: 'Dashboard', icon: DuotoneHomeIcon },
+  { to: '/messages', label: 'Message Management', icon: DuotoneMessageIcon },
+  { to: '/clients', label: 'Client Records', icon: DuotoneClientsIcon },
+  { to: '/logs', label: 'Logs', icon: DuotoneReceiptIcon },
 ] as const;
 
 const GUIDE_SECTIONS = [

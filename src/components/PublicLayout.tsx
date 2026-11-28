@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Heart, Mail, MapPin, Menu, Minus, Phone, Plus, Trash2, X } from 'lucide-react';
+import { Mail, MapPin, Menu, Minus, Phone, Plus, Trash2, X } from 'lucide-react';
+import { DuotoneHeartIcon } from './DuotoneIcons';
 import { useAppStore } from '../context/AppStoreContext';
 import { PENDING_OWNER_VERIFICATION_TEXT, SHOP_LOCATION } from '../data/services';
 import { renderMockupSnapshot } from '../lib/mockupCanvas';
@@ -133,8 +134,9 @@ export function PublicLayout() {
                 : 'border-[var(--line)] bg-[var(--surface-soft)] text-[var(--ink-strong)] hover:border-transparent hover:bg-[#38BDF8]'
                 }`}
             >
-              <Heart
-                className={`h-5 w-5 ${favoriteServices.length > 0 ? 'fill-black text-black' : ''}`}
+              <DuotoneHeartIcon
+                filled={favoriteServices.length > 0}
+                className={`h-5 w-5 ${favoriteServices.length > 0 ? 'text-black' : ''}`}
                 aria-hidden="true"
               />
               {favoriteServices.length > 0 && (

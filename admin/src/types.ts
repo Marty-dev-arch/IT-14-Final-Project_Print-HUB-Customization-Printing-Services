@@ -42,6 +42,8 @@ export interface InquiryItem {
   adminSeenAt?: string | null;
   acceptedAt?: string | null;
   archivedToHistory?: boolean;
+  isArchived?: boolean;
+  isBlocked?: boolean;
   status: InquiryStatus;
   submittedAt: string;
   updatedAt: string;
@@ -63,6 +65,7 @@ export interface ClientItem {
   createdAt: string;
   updatedAt: string;
   inquiryCount?: number;
+  referenceCode?: string | null;
 }
 
 export interface ActivityLogItem {

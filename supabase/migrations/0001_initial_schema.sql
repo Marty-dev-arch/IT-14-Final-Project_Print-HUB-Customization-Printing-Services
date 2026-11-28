@@ -103,7 +103,7 @@ CREATE POLICY "Admins manage inquiries"
   USING (is_rjhub_admin())
   WITH CHECK (is_rjhub_admin());
 
--- Anonymous users may only submit new inquiries (through validated edge/API flow), never read or mutate
+
 CREATE POLICY "Anonymous can submit pending inquiry only"
   ON inquiries FOR INSERT
   TO anon

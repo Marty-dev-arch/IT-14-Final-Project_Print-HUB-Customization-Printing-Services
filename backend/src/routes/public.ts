@@ -312,6 +312,16 @@ export function createPublicRouter(store: BackendStore): Router {
       return;
     }
 
+    const isBlocked = await store.isCustomerBlocked({
+      name: cleanText(body.customerName),
+      contact: cleanText(body.contactInfo),
+      email: cleanText(body.email) || undefined,
+    });
+    if (isBlocked) {
+      res.status(403).json({ error: 'Unable to submit message at this time.' });
+      return;
+    }
+
     const qtyRaw = Number(body.quantity);
     const totalRaw = Number(body.totalPrice);
     const resRaw = body.reservationFee !== undefined && body.reservationFee !== null ? Number(body.reservationFee) : undefined;
@@ -391,6 +401,10 @@ export function createPublicRouter(store: BackendStore): Router {
       res.status(404).json({ error: 'Inquiry reference not found.' });
       return;
     }
+    if (inquiry.isBlocked) {
+      res.status(403).json({ error: 'Unable to send message at this time.' });
+      return;
+    }
     const adminOnline = await isAnyAdminOnline(store);
     res.json({
       adminOnline,
@@ -436,6 +450,10 @@ export function createPublicRouter(store: BackendStore): Router {
     const inquiry = await store.getInquiryByRef(ref);
     if (!inquiry) {
       res.status(404).json({ error: 'Inquiry reference not found.' });
+      return;
+    }
+    if (inquiry.isBlocked) {
+      res.status(403).json({ error: 'Unable to send message at this time.' });
       return;
     }
 

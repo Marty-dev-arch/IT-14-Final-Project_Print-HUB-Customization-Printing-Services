@@ -410,6 +410,8 @@ describe('RJ HUB Printing — 12-Case Backend & Admin Security Test Suite', () =
         .send({ pin: '999999' });
       expect(bad.status).toBe(401);
       expect(bad.body.remainingAttempts).toBe(3 - attempt);
+      expect(bad.body.error).not.toMatch(/[()]/);
+      expect(bad.body.error).toContain(`${3 - attempt} ${3 - attempt === 1 ? 'attempt' : 'attempts'} remaining`);
     }
 
     const locked = await request(ctx.app)
@@ -770,5 +772,80 @@ describe('RJ HUB Printing — 12-Case Backend & Admin Security Test Suite', () =
       .set('X-CSRF-Token', auth.csrf);
     expect(clearHistRes.status).toBe(200);
     expect(clearHistRes.body.deletedCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('17. Captures phone numbers from chat, filters client scopes with referenceCode, and enforces Archive/Block/Delete', async () => {
+    const custRes = await request(ctx.app)
+      .post('/api/inquiries')
+      .send({
+        customerName: 'Marco Santos',
+        contactInfo: 'marco@gmail.com',
+        email: 'marco@gmail.com',
+        serviceId: 'sintra-board',
+        message: 'Inquiry without phone first.',
+      });
+    expect(custRes.status).toBe(201);
+    const inqId = custRes.body.inquiry.id as string;
+    const refCode = custRes.body.inquiry.referenceCode as string;
+
+    // Customer sends phone number later in chat message
+    const phoneMsgRes = await request(ctx.app)
+      .post(`/api/inquiries/by-ref/${refCode}/messages`)
+      .send({
+        senderName: 'Marco Santos',
+        messageText: 'Call me at +63 917 888 1234 please.',
+      });
+    expect(phoneMsgRes.status).toBe(201);
+    expect(phoneMsgRes.body.inquiry.customerContactSnapshot).toContain('09178881234');
+
+    const auth = await authenticateOwner(ctx.app, ctx.totpSecret);
+
+    // Scope=all returns inquiry referenceCode
+    const allClients = await request(ctx.app)
+      .get('/api/admin/clients?scope=all')
+      .set('Cookie', [`rjhub_admin_session=${auth.session}`]);
+    expect(allClients.status).toBe(200);
+    expect(allClients.body.clients.some((c: { referenceCode?: string }) => c.referenceCode === refCode)).toBe(true);
+
+    // Unaccepted request appears under folder=requests and can be archived
+    const reqList = await request(ctx.app)
+      .get('/api/admin/inquiries?folder=requests')
+      .set('Cookie', [`rjhub_admin_session=${auth.session}`]);
+    expect(reqList.body.inquiries.some((i: { id: string }) => i.id === inqId)).toBe(true);
+
+    const archRes = await request(ctx.app)
+      .post(`/api/admin/inquiries/${inqId}/archive`)
+      .set('Cookie', [`rjhub_admin_session=${auth.session}`, `rjhub_csrf=${auth.csrf}`])
+      .set('X-CSRF-Token', auth.csrf)
+      .send({ archived: true });
+    expect(archRes.status).toBe(200);
+    expect(archRes.body.inquiry.isArchived).toBe(true);
+
+    const archList = await request(ctx.app)
+      .get('/api/admin/inquiries?folder=archive')
+      .set('Cookie', [`rjhub_admin_session=${auth.session}`]);
+    expect(archList.body.inquiries.some((i: { id: string }) => i.id === inqId)).toBe(true);
+
+    // Block prevents subsequent customer messages with 403
+    const blockRes = await request(ctx.app)
+      .post(`/api/admin/inquiries/${inqId}/block`)
+      .set('Cookie', [`rjhub_admin_session=${auth.session}`, `rjhub_csrf=${auth.csrf}`])
+      .set('X-CSRF-Token', auth.csrf)
+      .send({ blocked: true });
+    expect(blockRes.status).toBe(200);
+    expect(blockRes.body.inquiry.isBlocked).toBe(true);
+
+    const blockedFollowUp = await request(ctx.app)
+      .post(`/api/inquiries/by-ref/${refCode}/messages`)
+      .send({ senderName: 'Marco Santos', messageText: 'Still blocked?' });
+    expect(blockedFollowUp.status).toBe(403);
+
+    // Single delete removes thread
+    const delRes = await request(ctx.app)
+      .delete(`/api/admin/inquiries/${inqId}`)
+      .set('Cookie', [`rjhub_admin_session=${auth.session}`, `rjhub_csrf=${auth.csrf}`])
+      .set('X-CSRF-Token', auth.csrf);
+    expect(delRes.status).toBe(200);
+    expect(delRes.body.deleted).toBe(true);
   });
 });

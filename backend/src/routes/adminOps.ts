@@ -232,11 +232,18 @@ export function createAdminOpsRouter(store: BackendStore): Router {
         : 'All';
     let inquiries = await store.listInquiries({ search, status });
     if (folder === 'active') {
-      inquiries = inquiries.filter((i) => !i.archivedToHistory);
+      inquiries = inquiries.filter((i) => !i.archivedToHistory && !i.isArchived && !i.isBlocked);
+    } else if (folder === 'requests') {
+      inquiries = inquiries.filter(
+        (i) => !i.acceptedAt && !i.archivedToHistory && !i.isArchived && !i.isBlocked,
+      );
+    } else if (folder === 'archive') {
+      inquiries = inquiries.filter((i) => Boolean(i.isArchived) && !i.isBlocked);
     } else if (folder === 'history') {
       inquiries = inquiries.filter(
         (i) =>
           Boolean(i.archivedToHistory) ||
+          Boolean(i.isBlocked) ||
           Boolean(i.acceptedAt) ||
           i.responses.some((r) => r.senderRole === 'admin'),
       );
@@ -350,6 +357,91 @@ export function createAdminOpsRouter(store: BackendStore): Router {
     res.json({ inquiry: updated });
   });
 
+  router.post('/inquiries/:id/archive', async (req: AuthenticatedAdminRequest, res) => {
+    const id = cleanText(req.params.id);
+    if (!isValidId(id)) {
+      res.status(400).json({ error: 'Invalid inquiry identifier.' });
+      return;
+    }
+    const archived = (req.body as Record<string, unknown>)?.archived !== false;
+    const updated = await store.setInquiryArchive(id, archived);
+    if (!updated) {
+      res.status(404).json({ error: 'Inquiry not found.' });
+      return;
+    }
+    await store.appendActivityLog({
+      actorType: 'admin',
+      actorId: req.admin!.id,
+      actorIdentity: req.admin!.email,
+      category: 'inquiries',
+      action: archived ? 'INQUIRY_ARCHIVED' : 'INQUIRY_UNARCHIVED',
+      description: `${archived ? 'Archived' : 'Unarchived'} ${updated.referenceCode}.`,
+      targetType: 'inquiry',
+      targetId: updated.id,
+      metadata: { referenceCode: updated.referenceCode, archived },
+    });
+    res.json({ inquiry: updated });
+  });
+
+  router.post('/inquiries/:id/block', async (req: AuthenticatedAdminRequest, res) => {
+    const id = cleanText(req.params.id);
+    if (!isValidId(id)) {
+      res.status(400).json({ error: 'Invalid inquiry identifier.' });
+      return;
+    }
+    const blocked = (req.body as Record<string, unknown>)?.blocked !== false;
+    const updated = await store.setInquiryBlock(id, blocked);
+    if (!updated) {
+      res.status(404).json({ error: 'Inquiry not found.' });
+      return;
+    }
+    await store.appendActivityLog({
+      actorType: 'admin',
+      actorId: req.admin!.id,
+      actorIdentity: req.admin!.email,
+      category: 'inquiries',
+      action: blocked ? 'CUSTOMER_MESSAGE_BLOCKED' : 'CUSTOMER_MESSAGE_UNBLOCKED',
+      description: `${blocked ? 'Blocked' : 'Unblocked'} messages from ${updated.customerNameSnapshot}.`,
+      targetType: 'inquiry',
+      targetId: updated.id,
+      metadata: { referenceCode: updated.referenceCode, blocked },
+    });
+    res.json({ inquiry: updated });
+  });
+
+  router.delete(
+    '/inquiries/:id',
+    requireAdminSession(store, {
+      minStage: 'mfa_verified',
+      allowedRoles: ['owner', 'admin'],
+      requireReauthMinutes: 5,
+    }),
+    async (req: AuthenticatedAdminRequest, res) => {
+      const id = cleanText(req.params.id);
+      if (!isValidId(id)) {
+        res.status(400).json({ error: 'Invalid inquiry identifier.' });
+        return;
+      }
+      const deleted = await store.deleteInquiry(id);
+      if (!deleted) {
+        res.status(404).json({ error: 'Inquiry not found.' });
+        return;
+      }
+      await store.appendActivityLog({
+        actorType: 'admin',
+        actorId: req.admin!.id,
+        actorIdentity: req.admin!.email,
+        category: 'inquiries',
+        action: 'INQUIRY_DELETED',
+        description: `Deleted message thread ${id}.`,
+        targetType: 'inquiry',
+        targetId: id,
+        metadata: {},
+      });
+      res.json({ deleted: true });
+    },
+  );
+
   router.patch('/inquiries/:id/status', async (req: AuthenticatedAdminRequest, res) => {
     const id = cleanText(req.params.id);
     const status = cleanText((req.body as Record<string, unknown>)?.status) as InquiryStatus;
@@ -435,9 +527,13 @@ export function createAdminOpsRouter(store: BackendStore): Router {
     const page = Math.max(1, Number(req.query.page ?? 1) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 12) || 12));
 
-    let items = await store.listClients(scope === 'logs' ? '' : search);
+    let items = await store.listClients();
     if (scope === 'pending') {
       items = items.filter((c) => (c.orderStatus ?? 'Pending') === 'Pending');
+    } else if (scope === 'completed' || scope === 'done') {
+      items = items.filter((c) => c.orderStatus === 'Done');
+    } else if (scope === 'cancelled') {
+      items = items.filter((c) => c.orderStatus === 'Cancelled');
     } else if (scope === 'logs') {
       items = items.filter((c) => c.orderStatus === 'Done' || c.orderStatus === 'Cancelled');
     }
@@ -507,14 +603,30 @@ export function createAdminOpsRouter(store: BackendStore): Router {
       });
     }
 
-    const total = items.length;
-    const sliced = items.slice((page - 1) * pageSize, page * pageSize);
-    const withCounts = await Promise.all(
-      sliced.map(async (c) => {
+    let enriched = await Promise.all(
+      items.map(async (c) => {
         const linked = await store.getClientInquiries(c.id);
-        return { ...c, inquiryCount: linked.length };
+        return {
+          ...c,
+          inquiryCount: linked.length,
+          referenceCode: linked[0]?.referenceCode ?? `CL-${c.id.slice(0, 6).toUpperCase()}`,
+        };
       }),
     );
+
+    if (search) {
+      const q = search.toLowerCase();
+      enriched = enriched.filter(
+        (c) =>
+          c.fullName.toLowerCase().includes(q) ||
+          c.contactInfo.toLowerCase().includes(q) ||
+          (c.orderItem ?? '').toLowerCase().includes(q) ||
+          (c.referenceCode ?? '').toLowerCase().includes(q),
+      );
+    }
+
+    const total = enriched.length;
+    const withCounts = enriched.slice((page - 1) * pageSize, page * pageSize);
 
     res.json({ clients: withCounts, total, page, pageSize });
   });
